@@ -25,6 +25,10 @@ module.exports = (browser) => ({
                 use: ['style-loader', 'css-loader']
             },
             {
+                test: /monster_template\.(png|jpg)$/i,
+                type: 'asset/inline'
+            },
+            {
                 test: /\.(png|jpg|jpeg|gif|svg)$/i,
                 type: 'asset/resource',
                 generator: {

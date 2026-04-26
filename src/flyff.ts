@@ -6,6 +6,7 @@ import * as html from "./ui/html";
 import Input from "./utils/inputs";
 import { timer } from "./utils/timer";
 import { ImageDetection } from "./utils/imageDetection";
+import monsterTemplateUrl from './utils/monster_template_b64';
 
 // Declare global chrome/browser APIs
 declare const chrome: any;
@@ -27,6 +28,7 @@ class App {
     private isFocused = false;
     private monsterDetection = new ImageDetection();
     private lastAltBuffTime = 0;
+    private debugPanelVisible = false;
     private partySkillIntervals = new Map<string, number>();
     private buffWarningTimeout: number | null = null;
     private buffWarningBlinkInterval: number | null = null;
@@ -38,6 +40,7 @@ class App {
         const container = html.toElement(html.container)!;
         document.body.appendChild(container);
         new Draggabilly(<Element>container, {});
+        this.initResize(<HTMLElement>container);
 
         let interval = -1;
         const follow = <HTMLInputElement>html.get(`#input_follow`);
@@ -203,13 +206,273 @@ class App {
             target.classList.add("btn-primary");
         });
 
+        const debugToggle = <HTMLButtonElement>html.get(`#cheats_debug_toggle`);
+        debugToggle.addEventListener("pointerdown", () => {
+            this.debugPanelVisible = !this.debugPanelVisible;
+            const panel = <HTMLElement>html.get(`#cheats_debug_panel`);
+            panel.style.display = this.debugPanelVisible ? 'block' : 'none';
+            debugToggle.classList.toggle('btn-dark', !this.debugPanelVisible);
+            debugToggle.classList.toggle('btn-warning', this.debugPanelVisible);
+        });
+
+        const debugClear = <HTMLButtonElement>html.get(`#cheats_debug_clear`);
+        debugClear.addEventListener("pointerdown", () => {
+            const log = <HTMLElement>html.get(`#cheats_debug_log`);
+            log.innerHTML = '';
+        });
+
+        const debugCopy = <HTMLButtonElement>html.get(`#cheats_debug_copy`);
+        debugCopy.addEventListener("pointerdown", () => {
+            const log = <HTMLElement>html.get(`#cheats_debug_log`);
+            const text = Array.from(log.querySelectorAll('div'))
+                .map(d => d.textContent ?? '')
+                .join('\n');
+            navigator.clipboard.writeText(text).then(() => {
+                const orig = debugCopy.textContent;
+                debugCopy.textContent = 'copied!';
+                debugCopy.style.color = '#4fc3f7';
+                setTimeout(() => {
+                    debugCopy.textContent = orig;
+                    debugCopy.style.color = '#666';
+                }, 1200);
+            });
+        });
+
+        const debugClose = <HTMLButtonElement>html.get(`#cheats_debug_close`);
+        debugClose.addEventListener("pointerdown", () => {
+            this.debugPanelVisible = false;
+            const panel = <HTMLElement>html.get(`#cheats_debug_panel`);
+            panel.style.display = 'none';
+            const toggle = <HTMLButtonElement>html.get(`#cheats_debug_toggle`);
+            toggle.classList.remove('btn-warning');
+            toggle.classList.add('btn-dark');
+        });
+
+        (<HTMLButtonElement>html.get('#cheats_inspect_window')).addEventListener('pointerdown', () => this.inspectWindow());
+        (<HTMLButtonElement>html.get('#cheats_inspect_dom')).addEventListener('pointerdown',    () => this.inspectDOM());
+        (<HTMLButtonElement>html.get('#cheats_inspect_target')).addEventListener('pointerdown', () => this.inspectTarget());
+        (<HTMLButtonElement>html.get('#cheats_inspect_pixel')).addEventListener('pointerdown',  () => this.togglePixelInspector());
+
         // Initialize maximize button color
         this.updateMaximizeButtonColor();
 
         this.create2DCanvas();
-        
+
         // Load monster template image
         this.loadMonsterTemplate();
+    }
+
+    private inspectWindow() {
+        this.debugLog('--- Scan Window ---', 'info');
+        const keywords = ['game','mob','monster','player','target','entity','npc','unit','char','actor','scene','world','engine','flyff'];
+        const found: string[] = [];
+        for (const key of Object.keys(window)) {
+            const lk = key.toLowerCase();
+            if (keywords.some(k => lk.includes(k))) found.push(key);
+        }
+        if (found.length === 0) {
+            this.debugLog('Scan Window: no se encontraron variables relevantes', 'warn');
+        } else {
+            this.debugLog(`Scan Window: ${found.length} variables encontradas:`, 'success');
+            found.forEach(k => {
+                const val = (window as any)[k];
+                const type = typeof val;
+                const preview = type === 'object' ? (val ? Object.keys(val).slice(0,5).join(',') : 'null') : String(val).substring(0,60);
+                this.debugLog(`  window.${k} [${type}] = ${preview}`, 'info');
+            });
+        }
+        // Buscar JSEvents handlers
+        const js = (window as any).JSEvents;
+        if (js?.eventHandlers) {
+            const types = js.eventHandlers.map((h: any) => h.eventTypeString);
+            const unique = types.filter((v: string, i: number, a: string[]) => a.indexOf(v) === i);
+            this.debugLog(`JSEvents handlers (${types.length}): ${unique.join(', ')}`, 'info');
+        }
+        this.debugLog('--- Fin Scan Window ---', 'info');
+    }
+
+    private inspectDOM() {
+        this.debugLog('--- Scan DOM ---', 'info');
+        // Buscar canvas
+        const canvases = document.querySelectorAll('canvas');
+        this.debugLog(`Canvas encontrados: ${canvases.length}`, 'info');
+        canvases.forEach((c, i) => {
+            const ctx = c.getContext('webgl') || c.getContext('webgl2') || c.getContext('2d');
+            const ctxType = c.getContext('webgl2') ? 'webgl2' : c.getContext('webgl') ? 'webgl' : '2d';
+            this.debugLog(`  canvas[${i}] ${c.width}x${c.height} id="${c.id}" class="${c.className}" ctx=${ctxType}`, 'info');
+        });
+        // Buscar elementos UI del juego (HP bars, nombres, etc)
+        const selectors = ['[class*="target"]','[class*="monster"]','[class*="mob"]','[class*="hp"]','[class*="health"]','[class*="name"]','[id*="target"]','[id*="monster"]','[id*="hp"]'];
+        let domFound = 0;
+        selectors.forEach(sel => {
+            const els = document.querySelectorAll(sel);
+            if (els.length > 0) {
+                domFound += els.length;
+                els.forEach(el => {
+                    this.debugLog(`  DOM: ${el.tagName} sel="${sel}" id="${el.id}" class="${el.className.toString().substring(0,40)}"`, 'success');
+                });
+            }
+        });
+        if (domFound === 0) this.debugLog('Scan DOM: no se encontraron elementos UI de monstruo/target', 'warn');
+
+        // Buscar iframes
+        const iframes = document.querySelectorAll('iframe');
+        this.debugLog(`iframes: ${iframes.length}`, 'info');
+
+        // Body style cursor actual
+        const cursor = document.body.style.getPropertyValue('cursor');
+        this.debugLog(`Cursor actual: "${cursor}"`, 'info');
+        this.debugLog('--- Fin Scan DOM ---', 'info');
+    }
+
+    private inspectTarget() {
+        this.debugLog('--- Scan Target ---', 'info');
+        const gameCanvas = document.querySelector('canvas') as HTMLCanvasElement;
+        if (!gameCanvas) { this.debugLog('Canvas no encontrado', 'error'); return; }
+
+        // Copiar canvas a 2D temporal
+        const tmp = document.createElement('canvas');
+        tmp.width = gameCanvas.width;
+        tmp.height = gameCanvas.height;
+        const ctx = tmp.getContext('2d')!;
+        ctx.drawImage(gameCanvas, 0, 0);
+
+        const w = gameCanvas.width;
+        const h = gameCanvas.height;
+
+        // Escanear franjas horizontales en la parte superior (donde suele estar la UI de target)
+        const scanStripe = (label: string, y0: number, y1: number) => {
+            const stripe = ctx.getImageData(0, y0, w, y1 - y0);
+            const colors: Record<string, number> = {};
+            for (let i = 0; i < stripe.data.length; i += 16) {
+                const r = stripe.data[i], g = stripe.data[i+1], b = stripe.data[i+2];
+                if (r < 10 && g < 10 && b < 10) continue; // ignorar negro
+                const bucket = `rgb(${Math.round(r/32)*32},${Math.round(g/32)*32},${Math.round(b/32)*32})`;
+                colors[bucket] = (colors[bucket] || 0) + 1;
+            }
+            const top5 = Object.entries(colors).sort((a,b) => b[1]-a[1]).slice(0,5);
+            this.debugLog(`${label} [y=${y0}..${y1}]: colores dominantes = ${top5.map(([c,n]) => `${c}(${n})`).join(' | ')}`, 'info');
+        };
+
+        scanStripe('UI top 5%',    0,              Math.floor(h*0.05));
+        scanStripe('UI top 10%',   Math.floor(h*0.05), Math.floor(h*0.10));
+        scanStripe('UI top 15%',   Math.floor(h*0.10), Math.floor(h*0.15));
+        scanStripe('Centro pantalla', Math.floor(h*0.45), Math.floor(h*0.55));
+
+        // Pixel exacto en el centro (donde suele aparecer el cursor sobre el mob)
+        const cx = Math.floor(w / 2), cy = Math.floor(h / 2);
+        const cp = ctx.getImageData(cx - 5, cy - 5, 10, 10);
+        const avgR = Array.from(cp.data).filter((_,i) => i%4===0).reduce((a,b)=>a+b,0)/25;
+        const avgG = Array.from(cp.data).filter((_,i) => i%4===1).reduce((a,b)=>a+b,0)/25;
+        const avgB = Array.from(cp.data).filter((_,i) => i%4===2).reduce((a,b)=>a+b,0)/25;
+        this.debugLog(`Centro pantalla (${cx},${cy}) promedio 10x10: rgb(${avgR.toFixed(0)},${avgG.toFixed(0)},${avgB.toFixed(0)})`, 'info');
+        this.debugLog('--- Fin Scan Target ---', 'info');
+    }
+
+    private pixelInspectorActive = false;
+    private pixelInspectorHandler: ((e: MouseEvent) => void) | null = null;
+
+    private togglePixelInspector() {
+        const bar = <HTMLElement>html.get('#cheats_pixel_bar');
+        const btn = <HTMLButtonElement>html.get('#cheats_inspect_pixel');
+        const gameCanvas = document.querySelector('canvas') as HTMLCanvasElement;
+        if (!gameCanvas) { this.debugLog('Canvas no encontrado para pixel inspector', 'error'); return; }
+
+        if (this.pixelInspectorActive) {
+            // Desactivar
+            if (this.pixelInspectorHandler) document.removeEventListener('mousemove', this.pixelInspectorHandler);
+            this.pixelInspectorHandler = null;
+            this.pixelInspectorActive = false;
+            bar.style.display = 'none';
+            btn.style.color = '#ffb74d';
+            this.debugLog('Pixel Inspector desactivado', 'info');
+            return;
+        }
+
+        // Activar
+        this.pixelInspectorActive = true;
+        bar.style.display = 'block';
+        btn.style.color = '#fff200';
+        this.debugLog('Pixel Inspector activado — mueve el mouse sobre el juego', 'warn');
+
+        const tmp = document.createElement('canvas');
+        tmp.width = gameCanvas.width;
+        tmp.height = gameCanvas.height;
+        const ctx = tmp.getContext('2d')!;
+
+        this.pixelInspectorHandler = (e: MouseEvent) => {
+            ctx.drawImage(gameCanvas, 0, 0);
+            const scaleX = gameCanvas.width  / gameCanvas.getBoundingClientRect().width;
+            const scaleY = gameCanvas.height / gameCanvas.getBoundingClientRect().height;
+            const x = Math.floor(e.clientX * scaleX);
+            const y = Math.floor(e.clientY * scaleY);
+            if (x < 0 || y < 0 || x >= gameCanvas.width || y >= gameCanvas.height) return;
+            const p = ctx.getImageData(x, y, 1, 1).data;
+            const hex = '#' + [p[0],p[1],p[2]].map(v => v.toString(16).padStart(2,'0')).join('');
+            bar.innerHTML = `(${x},${y}) rgb(${p[0]},${p[1]},${p[2]}) <span style="display:inline-block;width:10px;height:10px;background:${hex};border:1px solid #555;vertical-align:middle"></span> ${hex}`;
+        };
+        document.addEventListener('mousemove', this.pixelInspectorHandler);
+    }
+
+    private initResize(container: HTMLElement) {
+        let resizing = false;
+        let mode = '';
+        let startX = 0, startY = 0, startW = 0, startH = 0;
+        const MIN_W = 180, MIN_H = 80;
+
+        const startResize = (e: PointerEvent, m: string) => {
+            e.stopPropagation();
+            e.preventDefault();
+            resizing = true;
+            mode = m;
+            startX = e.clientX;
+            startY = e.clientY;
+            startW = container.offsetWidth;
+            startH = container.offsetHeight;
+            document.body.style.userSelect = 'none';
+        };
+
+        (<HTMLElement>html.get('#resize_left')).addEventListener('pointerdown',   (e: PointerEvent) => startResize(e, 'left'));
+        (<HTMLElement>html.get('#resize_bottom')).addEventListener('pointerdown', (e: PointerEvent) => startResize(e, 'bottom'));
+        (<HTMLElement>html.get('#resize_corner')).addEventListener('pointerdown', (e: PointerEvent) => startResize(e, 'corner'));
+
+        document.addEventListener('pointermove', (e: PointerEvent) => {
+            if (!resizing) return;
+            const dx = startX - e.clientX;
+            const dy = e.clientY - startY;
+            if (mode === 'left' || mode === 'corner') {
+                container.style.width = Math.max(MIN_W, startW + dx) + 'px';
+            }
+            if (mode === 'bottom' || mode === 'corner') {
+                container.style.minHeight = Math.max(MIN_H, startH + dy) + 'px';
+            }
+        });
+
+        document.addEventListener('pointerup', () => {
+            if (!resizing) return;
+            resizing = false;
+            mode = '';
+            document.body.style.userSelect = '';
+        });
+    }
+
+    private debugLog(message: string, type: 'info' | 'error' | 'success' | 'warn' = 'info') {
+        const colors: Record<string, string> = {
+            info: '#eee',
+            success: '#4fc3f7',
+            error: '#ef5350',
+            warn: '#ffb74d',
+        };
+        const log = <HTMLElement>html.get(`#cheats_debug_log`);
+        if (!log) return;
+        const time = new Date().toLocaleTimeString('es', { hour12: false });
+        const line = document.createElement('div');
+        line.style.color = colors[type];
+        line.style.borderBottom = '1px solid #222';
+        line.style.padding = '1px 0';
+        line.textContent = `[${time}] ${message}`;
+        log.appendChild(line);
+        log.scrollTop = log.scrollHeight;
     }
 
     private createTimer() {
@@ -1712,60 +1975,46 @@ class App {
 
     private async loadMonsterTemplate() {
         try {
-            // Load the Captain Samoset monster image
-            let imagePath: string;
-            
-            try {
-                // Try Chrome API first
-                imagePath = chrome?.runtime?.getURL('assets/Captain Samoset.png');
-            } catch {
-                // Fallback to Firefox API
-                imagePath = browser?.runtime?.getURL('assets/Captain Samoset.png');
-            }
-            
-            await this.monsterDetection.loadTemplate(imagePath);
-            console.log('Monster template loaded successfully');
+            this.debugLog(`Cargando template...`, 'info');
+            await this.monsterDetection.loadTemplate(monsterTemplateUrl);
+            this.debugLog('Template cargado correctamente', 'success');
         } catch (error) {
-            console.error('Failed to load monster template:', error);
+            this.debugLog(`Error cargando template: ${error}`, 'error');
         }
     }
 
     private async detectAndClickMonster() {
         try {
-            console.log('=== Monster Detection Started ===');
-            
-            // Get the game canvas
+            this.debugLog('=== Deteccion iniciada ===', 'info');
+
             const gameCanvas = document.querySelector('canvas') as HTMLCanvasElement;
             if (!gameCanvas) {
-                console.error('❌ Game canvas not found');
+                this.debugLog('Canvas del juego no encontrado', 'error');
                 return;
             }
-            console.log(`✓ Game canvas found: ${gameCanvas.width}x${gameCanvas.height}`);
+            this.debugLog(`Canvas: ${gameCanvas.width}x${gameCanvas.height}`, 'info');
 
-            // Check if template is loaded
             if (!this.monsterDetection.isTemplateLoaded()) {
-                console.error('❌ Template image not loaded');
+                this.debugLog('Template no cargado', 'error');
                 return;
             }
-            console.log('✓ Template image loaded');
+            this.debugLog('Template OK', 'success');
 
-            // Detect monster in canvas
-            console.log('🔍 Scanning for monster...');
-            const result = this.monsterDetection.detectInCanvas(gameCanvas, 0.7); // 70% confidence threshold
+            this.debugLog('Escaneando...', 'info');
+            const result = this.monsterDetection.detectInCanvas(gameCanvas, 0.7);
 
             if (result.found) {
-                console.log(`✓ Monster FOUND at (${result.x}, ${result.y}) with confidence: ${result.confidence.toFixed(2)}`);
-
-                // Click on the monster
-                console.log('🖱️ Clicking monster...');
+                this.debugLog(`Monstruo encontrado en (${result.x}, ${result.y}) conf: ${result.confidence.toFixed(2)}`, 'success');
+                this.debugLog('Haciendo clic...', 'info');
                 await this.input.mouseClickEmmit(result.x, result.y);
+                this.debugLog('Clic enviado', 'success');
             } else {
-                console.log(`❌ Monster NOT found. Best match confidence: ${result.confidence.toFixed(2)}`);
+                this.debugLog(`No encontrado. Mejor conf: ${result.confidence.toFixed(2)}`, 'warn');
             }
-            
-            console.log('=== Detection Complete ===\n');
+
+            this.debugLog('=== Deteccion completa ===', 'info');
         } catch (error) {
-            console.error('❌ Error in monster detection:', error);
+            this.debugLog(`Error: ${error}`, 'error');
         }
     }
 }

@@ -15,5 +15,5 @@
         "16": "logo.png",
         "48": "logo.png"
     },
-    "web_accessible_resources": ["flyff.js"]
+    "web_accessible_resources": ["flyff.js", "assets/monster_template.png"]
 }

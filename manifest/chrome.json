@@ -20,7 +20,7 @@
     },
     "web_accessible_resources": [
         {
-            "resources": ["flyff.js"],
+            "resources": ["flyff.js", "assets/monster_template.png"],
             "matches": [
                 "https://universe.flyff.com/*",
                 "http://universe.flyff.com/*"

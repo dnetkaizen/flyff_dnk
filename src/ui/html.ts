@@ -195,6 +195,9 @@ export const buffsModal = () => `
 `;
 
 export const container = `<div id="cheats_container" style="${cheats_container_style}">
+    <div id="resize_left"   style="position:absolute;left:0;top:6px;width:6px;height:calc(100% - 12px);cursor:w-resize;z-index:10001;"></div>
+    <div id="resize_bottom" style="position:absolute;bottom:0;left:6px;right:6px;height:6px;cursor:s-resize;z-index:10001;"></div>
+    <div id="resize_corner" style="position:absolute;bottom:0;left:0;width:6px;height:6px;cursor:sw-resize;z-index:10001;"></div>
     <div id="cheats_main_content" style="align-items: center; display: flex; flex-direction: column;">
         <button id="cheats_minimize" class="btn btn-secondary" type="button" style="margin: ${BUTTON_MARGIN}; font-size: 10px; padding: 2px 6px; opacity: 0.5; filter: blur(0.5px);">−</button>
         <div id="cheats_collapse" class="collapse card card-body" style="margin-bottom: ${BUTTON_MARGIN};">
@@ -241,7 +244,38 @@ export const container = `<div id="cheats_container" style="${cheats_container_s
         <button id="cheats_toggle_all" class="btn btn-success" type="button" style="margin: ${BUTTON_MARGIN}; font-size: ${BUTTON_FONT_SIZE}; padding: ${BUTTON_PADDING};">On/Off</button>
         <button id="cheats_target" class="btn btn-primary" type="button" style="margin: ${BUTTON_MARGIN}; font-size: ${BUTTON_FONT_SIZE}; padding: ${BUTTON_PADDING};">Target</button>
         <button class="btn btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#cheats_collapse" aria-expanded="false" aria-controls="collapse_cheats" style="margin: ${BUTTON_MARGIN}; font-size: ${BUTTON_FONT_SIZE}; padding: ${BUTTON_PADDING};">Cheats</button>
-        <a id="cheats_upgrade" name="v${version}" href="#" style="text-align: center;">v${version}</a>    
+        <button id="cheats_debug_toggle" class="btn btn-dark" type="button" style="margin: ${BUTTON_MARGIN}; font-size: ${BUTTON_FONT_SIZE}; padding: ${BUTTON_PADDING};">Debug</button>
+        <div id="cheats_debug_panel" style="display: none; width: 320px; margin-top: 4px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; background: #1a1a1a; padding: 3px 6px; border-radius: 4px 4px 0 0;">
+                <span style="color: #aaa; font-size: 10px; font-family: monospace;">Debug Console</span>
+                <div style="display: flex; gap: 4px;">
+                    <button id="cheats_debug_copy" style="background: none; border: none; color: #666; font-size: 10px; cursor: pointer; padding: 0 2px;">copy</button>
+                    <button id="cheats_debug_clear" style="background: none; border: none; color: #666; font-size: 10px; cursor: pointer; padding: 0 2px;">clear</button>
+                    <button id="cheats_debug_close" style="background: none; border: none; color: #666; font-size: 10px; cursor: pointer; padding: 0 2px;">✕</button>
+                </div>
+            </div>
+            <div style="display: flex; gap: 2px; background: #1a1a1a; padding: 2px 6px; border-top: 1px solid #333;">
+                <button id="cheats_inspect_window" style="flex:1; background:#222; border:1px solid #444; color:#4fc3f7; font-size:9px; cursor:pointer; padding:2px; border-radius:3px;">Scan Window</button>
+                <button id="cheats_inspect_dom"    style="flex:1; background:#222; border:1px solid #444; color:#a5d6a7; font-size:9px; cursor:pointer; padding:2px; border-radius:3px;">Scan DOM</button>
+                <button id="cheats_inspect_pixel"  style="flex:1; background:#222; border:1px solid #444; color:#ffb74d; font-size:9px; cursor:pointer; padding:2px; border-radius:3px;">Pixel Inspector</button>
+                <button id="cheats_inspect_target" style="flex:1; background:#222; border:1px solid #444; color:#ef9a9a; font-size:9px; cursor:pointer; padding:2px; border-radius:3px;">Scan Target</button>
+            </div>
+            <div id="cheats_pixel_bar" style="display:none; background:#1a1a1a; padding:2px 6px; font-family:monospace; font-size:9px; color:#ffb74d; border-top:1px solid #333;">
+                Mueve el mouse sobre el juego...
+            </div>
+            <div id="cheats_debug_log" style="
+                background: #111;
+                color: #eee;
+                font-family: monospace;
+                font-size: 10px;
+                height: 180px;
+                overflow-y: auto;
+                padding: 4px 6px;
+                border-radius: 0 0 4px 4px;
+                word-break: break-all;
+            "></div>
+        </div>
+        <a id="cheats_upgrade" name="v${version}" href="#" style="text-align: center;">v${version}</a>
     </div>
     <div id="cheats_minimized" style="display: none; align-items: center; justify-content: center;">
         <button id="cheats_maximize" class="btn btn-primary" type="button" style="margin: ${BUTTON_MARGIN}; font-size: ${BUTTON_FONT_SIZE}; padding: ${BUTTON_PADDING};">+</button>

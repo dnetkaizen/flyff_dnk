@@ -1203,6 +1203,90 @@ class App {
         });
     }
 
+    private async isTargetSafe(): Promise<boolean> {
+        try {
+            const gameCanvas = document.querySelector('canvas') as HTMLCanvasElement;
+            if (!gameCanvas) {
+                this.debugLog('isTargetSafe: canvas no encontrado', 'error');
+                return true; // fallback: permitir ataque
+            }
+
+            // Copiar WebGL a canvas 2D temporal
+            const tmp = document.createElement('canvas');
+            tmp.width = gameCanvas.width;
+            tmp.height = gameCanvas.height;
+            const ctx = tmp.getContext('2d')!;
+            ctx.drawImage(gameCanvas, 0, 0);
+
+            // Leer franja superior donde aparece el nombre del target seleccionado
+            // Flyff muestra el nombre del target en la parte superior central del HUD
+            const centerX = Math.floor(gameCanvas.width / 2);
+            const nameWidth = Math.floor(gameCanvas.width * 0.25); // 25% del ancho centrado
+            const x0 = centerX - Math.floor(nameWidth / 2);
+            const y0 = Math.floor(gameCanvas.height * 0.02);
+            const y1 = Math.floor(gameCanvas.height * 0.10);
+
+            const stripe = ctx.getImageData(x0, y0, nameWidth, y1 - y0);
+
+            let redCount = 0;
+            let orangeCount = 0;
+            let whiteCount = 0;
+            let totalCount = 0;
+
+            for (let i = 0; i < stripe.data.length; i += 4) {
+                const r = stripe.data[i];
+                const g = stripe.data[i + 1];
+                const b = stripe.data[i + 2];
+                const a = stripe.data[i + 3];
+
+                // Ignorar negro (fondo) y transparente
+                if (a < 30) continue;
+                if (r < 20 && g < 20 && b < 20) continue;
+
+                totalCount++;
+
+                // Detectar rojo dominante (mob peligroso / elite)
+                if (r > 180 && g < 80 && b < 80) {
+                    redCount++;
+                }
+
+                // Detectar naranja (mob agresivo pero matable)
+                if (r > 200 && g > 100 && g < 180 && b < 60) {
+                    orangeCount++;
+                }
+
+                // Detectar blanco/gris (mob normal / neutral)
+                if (r > 180 && g > 180 && b > 180 && Math.abs(r - g) < 40 && Math.abs(r - b) < 40) {
+                    whiteCount++;
+                }
+            }
+
+            const redRatio = totalCount > 0 ? redCount / totalCount : 0;
+            const orangeRatio = totalCount > 0 ? orangeCount / totalCount : 0;
+            const whiteRatio = totalCount > 0 ? whiteCount / totalCount : 0;
+
+            this.debugLog(`isTargetSafe: red=${(redRatio * 100).toFixed(1)}% orange=${(orangeRatio * 100).toFixed(1)}% white=${(whiteRatio * 100).toFixed(1)}% total=${totalCount}`, 'info');
+
+            // Si hay más rojo que blanco → mob peligroso
+            if (redRatio > 0.08 && redRatio > whiteRatio) {
+                this.debugLog('isTargetSafe: MOB PELIGROSO (rojo dominante) → SKIP', 'warn');
+                return false;
+            }
+
+            // Si hay naranja significativo → también peligroso
+            if (orangeRatio > 0.10 && orangeRatio > whiteRatio) {
+                this.debugLog('isTargetSafe: MOB AGRESIVO (naranja dominante) → SKIP', 'warn');
+                return false;
+            }
+
+            this.debugLog('isTargetSafe: mob seguro → ATACAR', 'success');
+            return true;
+        } catch (error) {
+            this.debugLog(`isTargetSafe error: ${error}`, 'error');
+            return true; // fallback: permitir
+        }
+    }
+
     private async attackTarget(
         target: HTMLInputElement,
         data: {
@@ -1215,11 +1299,23 @@ class App {
         target.classList.add("btn-secondary");
 
         if (await this.searchTarget()) {
-            await timer(500);
-            // Press Tab key first to target the monster
+            await timer(300);
+            // Press Tab to target the monster
             await this.input.send({ cast: 100, key: "Tab" });
-            await timer(100);
-            // Then press Z key
+            await timer(500); // esperar a que UI del target aparezca
+
+            // Filtrar mob por categoría
+            const safe = await this.isTargetSafe();
+            if (!safe) {
+                this.debugLog('Mob peligroso detectado → Escape + buscar otro', 'warn');
+                await this.input.send({ cast: 100, key: "Escape" });
+                await timer(300);
+                target.classList.remove("btn-secondary");
+                target.classList.add("btn-primary");
+                return;
+            }
+
+            // Then press Z key (follow)
             await this.input.send({ cast: 100, key: "z" });
             await timer(100);
             // Then continue with the configured skill key

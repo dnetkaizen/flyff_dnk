@@ -1,7 +1,9 @@
 # Handoff Completo — Flyff Universe Helper Bot
 **Fecha:** 2026-04-26  
 **Repositorio:** `C:\Users\SIEMENS\Documents\flyff_fwc_bot\flyff-universe-helper`  
-**Documentación:** `C:\Users\SIEMENS\Documents\fwc_bot_documentation\`
+**Documentación:** `documentation_dnk/` (dentro del repo)
+**GitHub:** https://github.com/dnetkaizen/flyff_dnk.git
+**Ramas:** `main` (prod), `ultronk` (ULTRON_NK), `opusnk` (Opus)
 
 ---
 
@@ -234,6 +236,24 @@ npm run build-chrome
 - [ ] Reemplazar template con screenshot real del juego
 - [ ] Ejecutar Scan Target con mob normal seleccionado → anotar colores
 - [ ] Ejecutar Scan Target con mob peligroso seleccionado → anotar colores  
-- [ ] Implementar `isTargetSafe()` con los colores obtenidos
+- [ ] Calibrar `isTargetSafe()` con los colores obtenidos (commit d17a234 en ultronk)
+- [ ] Probar flujo completo: Target → Tab → isTargetSafe → atacar/skip
+- [ ] Considerar mejora del radar: grid en lugar de espiral
+
+---
+
+## Cambios ULTRON_NK (sesión 2026-04-26)
+
+### Implementado: `isTargetSafe()` en `src/flyff.ts`
+- Lee franja superior del canvas (25% central, 2%-10% altura) tras Tab-target
+- Detecta pixeles rojos (>180R, <80G, <80B) y naranjas (>200R, 100-180G, <60B)
+- Thresholds: rojo >8% y > whiteRatio = peligroso, naranja >10% y > whiteRatio = agresivo
+- Integrado en `attackTarget()`: searchTarget → Tab → isTargetSafe → atacar o Escape+skip
+- **PENDIENTE CALIBRAR** con datos reales de Scan Target
+
+### Git cleanup
+- Eliminadas ramas: develop, docs/ia-workflow, session/ultron-20260426
+- Creadas: `ultronk` (ULTRON_NK), `opusnk` (Opus)
+- Estructura final: main / ultronk / opusnk
 - [ ] Integrar filtro en el flujo: Tab → isTargetSafe() → atacar o skip
 - [ ] Considerar mejora del radar: grid en lugar de espiral para búsqueda más rápida
